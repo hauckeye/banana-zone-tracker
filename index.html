@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Real-Time Banana Zone Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 2em; background: #f0f2f5; }
+    h2 { color: #333; }
+    #output { background: #fff; padding: 1em; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); white-space: pre-line; }
+  </style>
+</head>
+<body>
+  <h2>Real-Time Banana Zone Tracker</h2>
+  <div id="output">Initializing...</div>
+
+  <script>
+    const COINGECKO_API = 'https://api.coingecko.com/api/v3';
+    const FEAR_GREED_API = 'https://api.alternative.me/fng/';
+
+    async function fetchData() {
+      try {
+        const [marketData, btcData, ethData, solData, fngData] = await Promise.all([
+          fetch(`${COINGECKO_API}/global`).then(r => r.json()),
+          fetch(`${COINGECKO_API}/simple/price?ids=bitcoin&vs_currencies=usd`).then(r => r.json()),
+          fetch(`${COINGECKO_API}/simple/price?ids=ethereum&vs_currencies=btc`).then(r => r.json()),
+          fetch(`${COINGECKO_API}/simple/price?ids=solana&vs_currencies=eth`).then(r => r.json()),
+          fetch(FEAR_GREED_API).then(r => r.json())
+        ]);
+
+        return {
+          btcPrice: btcData.bitcoin.usd,
+          btcDominance: marketData.data.market_cap_percentage.btc,
+          ethBtcRatio: ethData.ethereum.btc,
+          solEthRatio: solData.solana.eth,
+          altcap: marketData.data.total_market_cap.usd * (1 - marketData.data.market_cap_percentage.btc / 100),
+          sentiment: parseInt(fngData.data[0].value)
+        };
+      } catch (e) {
+        console.error('Fetch error:', e);
+        return null;
+      }
+    }
+
+    function analyzeZone({ btcDominance, ethBtcRatio, solEthRatio, sentiment }) {
+      if (btcDominance > 50 && sentiment < 40) return 'Pre-Expansion';
+      if (btcDominance < 50 && ethBtcRatio > 0.06 && solEthRatio > 0.06 && sentiment > 60) return 'Banana Zone';
+      if (btcDominance < 48 && sentiment > 75) return 'Peak Euphoria';
+      return 'Consolidation or Late Cycle';
+    }
+
+    async function updateDisplay() {
+      const data = await fetchData();
+      if (!data) {
+        document.getElementById('output').textContent = 'Error fetching data.';
+        return;
+      }
+
+      const zone = analyzeZone(data);
+      document.getElementById('output').textContent =
+        `Current Phase: ${zone}\n\n` +
+        `BTC Price: $${data.btcPrice.toFixed(2)}\n` +
+        `BTC Dominance: ${data.btcDominance.toFixed(2)}%\n` +
+        `ETH/BTC Ratio: ${data.ethBtcRatio.toFixed(4)}\n` +
+        `SOL/ETH Ratio: ${data.solEthRatio.toFixed(4)}\n` +
+        `Altcoin Market Cap: $${(data.altcap / 1e9).toFixed(2)}B\n` +
+        `Sentiment Index: ${data.sentiment}`;
+    }
+
+    updateDisplay();
+    setInterval(updateDisplay, 10000);
+  </script>
+</body>
+</html>
